@@ -18,10 +18,21 @@ const initialElements = [
   { id: crypto.randomUUID(), type: 'sidewalk', label: 'Sidewalk', color: '#b9b7b3', width: 2.5 },
 ];
 
+const TRAFFIC_ICONS = {
+  bike: '🚲',
+  car: '🚗',
+  bus: '🚌',
+  parking: '🚙',
+  sidewalk: '🚶',
+  median: '🌿',
+};
+
 function App() {
   const [streetWidthLimit, setStreetWidthLimit] = useState(16);
   const [selectedType, setSelectedType] = useState(ELEMENT_LIBRARY[0].type);
   const [elements, setElements] = useState(initialElements);
+  const [draggedId, setDraggedId] = useState(null);
+  const [simulationMode, setSimulationMode] = useState(false);
 
   const usedWidth = useMemo(
     () => elements.reduce((sum, lane) => sum + Number(lane.width || 0), 0),
@@ -56,6 +67,30 @@ function App() {
 
   const removeElement = (id) => {
     setElements((prev) => prev.filter((item) => item.id !== id));
+  };
+
+  const moveElement = (sourceId, targetId) => {
+    if (!sourceId || sourceId === targetId) return;
+
+    setElements((prev) => {
+      const sourceIndex = prev.findIndex((item) => item.id === sourceId);
+      const targetIndex = prev.findIndex((item) => item.id === targetId);
+      if (sourceIndex < 0 || targetIndex < 0) return prev;
+
+      const reordered = [...prev];
+      const [moved] = reordered.splice(sourceIndex, 1);
+      reordered.splice(targetIndex, 0, moved);
+      return reordered;
+    });
+  };
+
+  const handleDragStart = (id) => {
+    setDraggedId(id);
+  };
+
+  const handleDrop = (targetId) => {
+    moveElement(draggedId, targetId);
+    setDraggedId(null);
   };
 
   return (
@@ -114,10 +149,27 @@ function App() {
             </p>
           </div>
 
-          <h3>Elements</h3>
+          <div className="section-header">
+            <h3>Elements</h3>
+            <button
+              type="button"
+              className="secondary"
+              onClick={() => setSimulationMode((prev) => !prev)}
+            >
+              {simulationMode ? 'Back to section' : 'Simulate street'}
+            </button>
+          </div>
+          <p className="helper-text">Drag elements to change their left-to-right location in the street.</p>
           <ul className="lane-list">
             {elements.map((item) => (
-              <li key={item.id}>
+              <li
+                key={item.id}
+                draggable
+                onDragStart={() => handleDragStart(item.id)}
+                onDragOver={(event) => event.preventDefault()}
+                onDrop={() => handleDrop(item.id)}
+                className={draggedId === item.id ? 'dragging' : ''}
+              >
                 <span className="chip" style={{ backgroundColor: item.color }} aria-hidden="true" />
                 <span className="name">{item.label}</span>
                 <input
@@ -137,25 +189,33 @@ function App() {
         </section>
 
         <section className="panel preview-panel">
-          <h2>Street preview</h2>
+          <h2>{simulationMode ? 'Street simulation' : 'Street preview'}</h2>
           <div className="street-canvas" role="img" aria-label="Street cross-section preview">
             {elements.map((item) => {
               const percent = usedWidth === 0 ? 0 : (item.width / usedWidth) * 100;
+              const speed = item.type === 'bus' ? 7 : item.type === 'bike' ? 16 : item.type === 'car' ? 10 : 0;
               return (
                 <div
                   key={item.id}
-                  className="street-segment"
+                  className={`street-segment ${simulationMode ? 'simulation-segment' : ''}`}
                   style={{ width: `${percent}%`, backgroundColor: item.color }}
                   title={`${item.label}: ${Number(item.width).toFixed(2)} m`}
                 >
                   <span>{item.label}</span>
                   <small>{Number(item.width).toFixed(1)}m</small>
+                  {simulationMode && (
+                    <div className="traffic-lane" style={{ animationDuration: `${speed}s` }}>
+                      <span>{TRAFFIC_ICONS[item.type]}</span>
+                    </div>
+                  )}
                 </div>
               );
             })}
           </div>
           <p className="preview-note">
-            Tip: adjust widths on the left to instantly update this section view.
+            {simulationMode
+              ? 'Live simulation: vehicles and users move according to the section you built.'
+              : 'Tip: adjust widths and drag element rows to instantly update this section view.'}
           </p>
         </section>
       </main>
